@@ -1,16 +1,16 @@
-import os, time, PyPDF2
-from flask import Flask, request, render_template_string, redirect, url_for, session, jsonify
+import os, time, PyPDF2, requests
+from flask import Flask, request, render_template_string, redirect, url_for, session, jsonify, Response
 from supabase import create_client
 
 app = Flask(__name__)
-app.secret_key = "JIIT_FINAL_ULTIMATE_2026"
+app.secret_key = "JIIT_PRINTFLOW_FINAL_ULTIMATE_V2026_FIXED"
 
 # --- CONFIGURATION ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://lxbqnmovxirkfcsdaaan.supabase.co")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4YnFubW92eGlya2Zjc2RhYWFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NjQ2OTIsImV4cCI6MjA4NTU0MDY5Mn0.5znjA4dhlhn7b65sJLKAfujNdnS_STPT_AS4pTNEGts")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- PDF PROCESSING ---
+# --- PDF PROCESSING ENGINE ---
 def process_pdf_and_count(input_path, output_path, range_str):
     try:
         reader = PyPDF2.PdfReader(input_path)
@@ -40,37 +40,31 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PrintFlow Pro | JIIT</title>
+    <title>PrintFlow Pro | JIIT Portal</title>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root { --sidebar: #0f172a; --primary: #2563eb; --accent: #f59e0b; --bg: #f8fafc; --sidebar-width: 260px; }
         body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); margin: 0; display: flex; min-height: 100vh; }
-        
         .sidebar { width: var(--sidebar-width); background: var(--sidebar); height: 100vh; color: white; padding: 2rem 1.5rem; position: fixed; left: 0; top: 0; z-index: 1000; box-sizing: border-box; }
         .logo { font-weight: 800; font-size: 1.5rem; margin-bottom: 2.5rem; display: flex; align-items: center; gap: 10px; }
         .logo span { color: var(--primary); }
         .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px; color: #94a3b8; text-decoration: none; border-radius: 8px; transition: 0.3s; margin-bottom: 10px; }
         .nav-item:hover, .nav-item.active { background: #1e293b; color: white; }
-
         .main { margin-left: var(--sidebar-width); padding: 2.5rem; width: calc(100% - var(--sidebar-width)); box-sizing: border-box; min-height: 100vh; }
         .card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; padding: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-bottom: 1.5rem; }
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
-        
         input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #e2e8f0; box-sizing: border-box; font-family: inherit; }
         .btn-primary { background: var(--primary); color: white; border: none; font-weight: 700; cursor: pointer; transition: 0.2s; }
-        .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
-        
         .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
         .Queued { background: #f1f5f9; color: #475569; }
         .Printing { background: #fef3c7; color: #92400e; }
         .Ready { background: #dcfce7; color: #166534; }
-
-        #pay-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 2000; align-items: center; justify-content: center; }
-        .modal-card { background: white; padding: 2rem; border-radius: 24px; width: 350px; text-align: center; }
         table { width: 100%; border-collapse: collapse; }
         th { text-align: left; padding: 12px 0; color: #64748b; font-size: 0.85rem; }
         td { padding: 12px 0; border-top: 1px solid #f1f5f9; }
+        #pay-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 2000; align-items: center; justify-content: center; }
+        .modal { background: white; padding: 2rem; border-radius: 24px; width: 350px; text-align: center; }
     </style>
 </head>
 <body>
@@ -90,97 +84,113 @@ HTML_TEMPLATE = """
     <div class="sidebar">
         <div class="logo">PRINT<span>FLOW</span></div>
         <a href="/" class="nav-item {{ 'active' if active_page == 'dashboard' else '' }}"><i data-lucide="layout-dashboard"></i> Dashboard</a>
-        <a href="/my-orders" class="nav-item {{ 'active' if active_page == 'orders' else '' }}"><i data-lucide="printer"></i> My Orders</a>
+        {% if session['role'] == 'student' %}<a href="/my-orders" class="nav-item {{ 'active' if active_page == 'orders' else '' }}"><i data-lucide="printer"></i> My Orders</a>{% endif %}
         <a href="/logout" class="nav-item" style="position:absolute; bottom:2rem; width:210px; color: #f87171;"><i data-lucide="log-out"></i> Logout</a>
     </div>
 
     <div class="main">
         <div style="margin-bottom:2.5rem;">
-            <h1 style="margin:0; font-size:1.75rem;">JIIT Smart Printing</h1>
-            <p style="margin: 4px 0 0 0; color: #64748b;">Logged in as: <strong>{{ session['email'] }}</strong></p>
+            <h1>JIIT Smart Printing</h1>
+            <p>User: <strong>{{ session['email'] }}</strong></p>
         </div>
 
         {% if session['role'] == 'student' %}
-            {% if active_page == 'dashboard' %}
             <div class="stats">
-                <div class="card"><small style="color:#64748b; font-weight:700;">QUEUE POSITION</small><div id="q-pos" style="font-size:1.8rem; font-weight:800; margin-top:5px;">#--</div></div>
-                <div class="card"><small style="color:#64748b; font-weight:700;">EST. WAIT TIME</small><div style="font-size:1.8rem; font-weight:800; margin-top:5px; color: var(--accent);">~5 Mins</div></div>
+                <div class="card"><small style="font-weight:700; color:gray;">LIVE ACTIVE QUEUE</small><div style="font-size:1.5rem; font-weight:800;" id="live-pages">0 Pages</div></div>
+                <div class="card"><small style="font-weight:700; color:gray;">EST. WAIT TIME</small><div style="font-size:1.5rem; font-weight:800; color:var(--accent);" id="live-eta">-- mins</div></div>
             </div>
+
+            {% if active_page == 'dashboard' %}
             <div class="card">
-                <h3 style="margin-top:0;"><i data-lucide="upload-cloud"></i> Upload New Document</h3>
-                <form id="print-form" action="/upload" method="POST" enctype="multipart/form-data">
-                    <label style="font-size:0.85rem; font-weight:700; color:#475569;">SELECT PDF FILE</label>
-                    <input type="file" name="file" accept=".pdf" required id="f-pdf">
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-                        <div><label style="font-size:0.85rem; font-weight:700;">PAGE RANGE</label><input type="text" name="range" placeholder="e.g. 1-5"></div>
-                        <div><label style="font-size:0.85rem; font-weight:700;">COLOR MODE</label><select name="color_mode" id="c-mode"><option value="B/W">B&W (₹2/pg)</option><option value="Color">Color (₹10/pg)</option></select></div>
+                <h3><i data-lucide="upload-cloud"></i> New Print Request</h3>
+                <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
+                    <input type="file" name="file" accept=".pdf" required id="fileInput">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:10px;">
+                        <select name="color_mode" id="colorMode"><option value="B/W">B&W (₹3/pg)</option><option value="Color">Color (₹11/pg)</option></select>
+                        <select name="page_size"><option value="A4">A4</option><option value="A3">A3</option></select>
                     </div>
-                    <button type="button" onclick="openPayment()" class="btn-primary" style="margin-top:1rem; padding: 15px;">Continue to Payment</button>
+                    <button type="button" onclick="showPayment()" class="btn-primary" style="margin-top:1rem; padding:15px;">Review & Pay</button>
                 </form>
             </div>
-            {% elif active_page == 'orders' %}
-            <div class="card">
-                <h3 style="margin-top:0;"><i data-lucide="history"></i> My Order Status</h3>
-                <div id="queue-list"><p style="color:gray;">Syncing with server...</p></div>
-            </div>
+            {% else %}
+            <div class="card"><h3>Order History</h3><div id="queue-list">Syncing...</div></div>
             {% endif %}
         {% else %}
-        <div class="card">
-            <h3>Admin Print Queue</h3>
+        <div class="card" style="border-left: 5px solid var(--primary);">
+            <h3>Active Queue</h3>
             <table>
-                <thead><tr><th>STUDENT</th><th>CONFIG</th><th>PAGES</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
+                <thead><tr><th>STUDENT</th><th>CONFIG</th><th>PRICE</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
                 <tbody>
-                    {% for j in jobs %}
+                    {% for j in jobs if j.status != 'Ready' %}
                     <tr>
                         <td><strong>{{ j.student_email.split('@')[0] }}</strong></td>
-                        <td>{{ j.color_mode }} <small>({{ j.selected_range }})</small></td>
-                        <td>{{ j.page_count }}</td>
+                        <td>{{ j.page_size }} | {{ j.color_mode }}</td>
+                        <td>₹{{ j.price }}</td>
                         <td><span class="badge {{j.status}}">{{ j.status }}</span></td>
-                        <td><a href="{{ j.file_url }}" target="_blank">VIEW</a> | <a href="/update/{{ j.id }}/Printing">PRINT</a> | <a href="/update/{{ j.id }}/Ready">DONE</a></td>
+                        <td>
+                            <button onclick="window.open('/view/{{ j.id }}', '_blank')" style="background:#eff6ff; color:var(--primary); padding:8px 12px; border:none; border-radius:6px; font-weight:800; cursor:pointer;">VIEW</button>
+                            <a href="/update/{{ j.id }}/Ready" style="color:green; margin-left:10px; font-weight:700; text-decoration:none;">DONE</a>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+        <div class="card" style="opacity: 0.8; margin-top: 2rem;">
+            <h3>Staff History (Read-Only)</h3>
+            <table>
+                {% for j in jobs if j.status == 'Ready' %}
+                <tr style="color:gray;"><td>{{ j.student_email.split('@')[0] }}</td><td>₹{{ j.price }}</td><td><span class="badge Ready">Ready</span></td></tr>
+                {% endfor %}
+            </table>
+        </div>
         {% endif %}
     </div>
 
-    <div id="pay-overlay"><div class="modal-card">
-        <h3>Mock Payment</h3>
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=upi://pay?pa=jiit@upi" style="margin:1rem 0;">
-        <div style="background:#f8fafc; padding:15px; border-radius:12px; margin-bottom:1.5rem;">
-            <span style="font-size:1.75rem; font-weight:800; color:var(--primary);" id="m-price">₹0.00</span>
+    <div id="pay-overlay">
+        <div class="modal">
+            <h3>Confirm Payment</h3>
+            <div style="font-size:2rem; font-weight:800; color:var(--primary); margin: 1rem 0;" id="modalPrice">₹0</div>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=jiit@upi" style="margin-bottom:1rem;">
+            <button onclick="document.getElementById('uploadForm').submit()" class="btn-primary">Verify & Submit</button>
+            <button onclick="document.getElementById('pay-overlay').style.display='none'" style="background:none; border:none; color:red; cursor:pointer; margin-top:10px;">Cancel</button>
         </div>
-        <button onclick="mockSuccess()" id="m-btn" class="btn-primary" style="padding:15px;">Verify Payment</button>
-    </div></div>
+    </div>
 
     <script>
         lucide.createIcons();
-        function openPayment() {
-            if(!document.getElementById('f-pdf').files[0]) return alert("Select a PDF!");
-            document.getElementById('m-price').innerText = (document.getElementById('c-mode').value === 'Color' ? '₹20.00' : '₹4.00');
+        function showPayment() {
+            if(!document.getElementById('fileInput').files[0]) return alert("Select a file.");
+            const rate = document.getElementById('colorMode').value === 'Color' ? 11 : 3;
+            document.getElementById('modalPrice').innerText = "Rate: ₹" + rate + "/pg";
             document.getElementById('pay-overlay').style.display = 'flex';
-        }
-        function mockSuccess() {
-            document.getElementById('m-btn').innerText = "Verifying...";
-            setTimeout(() => { document.getElementById('print-form').submit(); }, 1200);
         }
         async function sync() {
             try {
                 const r = await fetch('/api/queue'); const jobs = await r.json();
-                let html = ''; let pos = 0; let myPos = '--'; const email = "{{ session['email'] }}";
+                let html = ''; let activePages = 0; const email = "{{ session['email'] }}";
+                
                 jobs.forEach(j => {
-                    if(j.status === 'Queued') pos++;
+                    // CRITICAL FIX: Only count pages if status is NOT 'Ready'
+                    if(j.status !== 'Ready') {
+                        activePages += j.page_count;
+                    }
+                    
                     if(j.student_email === email) {
-                        if(j.status === 'Queued') myPos = '#'+pos;
-                        html += `<div style="padding:15px 0; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;">
-                            <div><strong>#${j.id}</strong><div style="font-size:0.75rem; color:gray;">${j.color_mode} • ${j.page_count} Pages</div></div>
+                        const name = j.file_url.split('/').pop().split('_').slice(2).join('_');
+                        html += `<div style="padding:15px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+                            <div><strong>${name}</strong><div style="font-size:0.75rem; color:gray;">₹${j.price} | ETA: ${j.eta}</div></div>
                             <span class="badge ${j.status}">${j.status}</span>
                         </div>`;
                     }
                 });
-                if(document.getElementById('queue-list')) document.getElementById('queue-list').innerHTML = html || 'No orders yet.';
-                if(document.getElementById('q-pos')) document.getElementById('q-pos').innerText = myPos;
+                
+                if(document.getElementById('live-pages')) document.getElementById('live-pages').innerText = activePages + " Pages";
+                if(document.getElementById('live-eta')) {
+                   const wait = Math.max(2, Math.floor(activePages/5) + 2);
+                   document.getElementById('live-eta').innerText = wait + " mins";
+                }
+                if(document.getElementById('queue-list')) document.getElementById('queue-list').innerHTML = html || 'No orders.';
             } catch(e) {}
         }
         setInterval(sync, 4000); sync();
@@ -195,12 +205,11 @@ HTML_TEMPLATE = """
 def index():
     jobs = []
     if session.get('role') == 'staff':
-        jobs = supabase.table('print_jobs').select("*").neq("status", "Completed").order('created_at', desc=True).execute().data
+        jobs = supabase.table('print_jobs').select("*").order('created_at', desc=True).execute().data
     return render_template_string(HTML_TEMPLATE, jobs=jobs, active_page="dashboard")
 
 @app.route('/my-orders')
 def my_orders():
-    if not session.get('user_id'): return redirect('/')
     return render_template_string(HTML_TEMPLATE, active_page="orders")
 
 @app.route('/auth', methods=['POST'])
@@ -211,46 +220,54 @@ def auth():
         role = 'staff' if email == 'staff@jiit.ac.in' else 'student'
         session.update({'user_id': str(res.user.id), 'email': email, 'role': role})
         return redirect('/')
-    except Exception as e: return f"Auth Error: {e}"
+    except: return "Auth Error"
+
+@app.route('/view/<int:job_id>')
+def view_file(job_id):
+    job = supabase.table('print_jobs').select("file_url").eq("id", job_id).single().execute()
+    response = requests.get(job.data['file_url'], stream=True)
+    return Response(response.iter_content(chunk_size=1024), mimetype='application/pdf', headers={"Content-Disposition": "inline"})
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    temp_dir = "/tmp" if os.name != 'nt' else "temp"
-    if not os.path.exists(temp_dir): os.makedirs(temp_dir)
     file = request.files['file']
+    color_mode = request.form.get('color_mode', 'B/W')
     t_stamp = int(time.time())
-    local_raw = os.path.join(temp_dir, f"raw_{t_stamp}.pdf")
-    local_final = os.path.join(temp_dir, f"final_{t_stamp}.pdf")
-    file.save(local_raw)
-    count, final_path = process_pdf_and_count(local_raw, local_final, request.form.get('range', 'All'))
-    storage_name = f"{t_stamp}_{file.filename}"
+    local_path = os.path.join("/tmp", f"{t_stamp}.pdf")
+    file.save(local_path)
+    
+    count, final_path = process_pdf_and_count(local_path, local_path, "")
+    total_price = count * (11 if color_mode == 'Color' else 3)
+    
+    # Python Side ETA Fix: Explicitly filter out 'Ready'
+    active = supabase.table('print_jobs').select("page_count").neq("status", "Ready").execute()
+    total_active_pages = sum(j['page_count'] for j in active.data)
+    eta_val = max(2, (total_active_pages // 5) + 2)
+    
+    storage_name = f"pdf_{t_stamp}_{file.filename.replace(' ', '_')}"
     with open(final_path, 'rb') as f:
-        supabase.storage.from_('print-files').upload(storage_name, f)
+        supabase.storage.from_('print-files').upload(storage_name, f, {"content-type": "application/pdf"})
+    
     url = supabase.storage.from_('print-files').get_public_url(storage_name)
     supabase.table('print_jobs').insert({
         "student_email": session['email'], "file_url": url, "page_count": count,
-        "selected_range": request.form.get('range', 'All'), "color_mode": request.form.get('color_mode'), "status": "Queued"
+        "price": total_price, "color_mode": color_mode, "eta": f"{eta_val}m",
+        "page_size": request.form.get('page_size', 'A4'), "status": "Queued"
     }).execute()
-    os.remove(local_raw)
-    if os.path.exists(local_final) and local_final != local_raw: os.remove(local_final)
     return redirect('/my-orders')
 
 @app.route('/api/queue')
 def get_queue():
-    res = supabase.table('print_jobs').select("*").order('created_at', desc=False).execute()
+    res = supabase.table('print_jobs').select("*").execute()
     return jsonify(res.data)
 
 @app.route('/update/<int:job_id>/<status>')
 def update_status(job_id, status):
-    if session.get('role') == 'staff': supabase.table('print_jobs').update({"status": status}).eq("id", job_id).execute()
+    supabase.table('print_jobs').update({"status": status}).eq("id", job_id).execute()
     return redirect('/')
 
 @app.route('/logout')
 def logout():
     session.clear(); return redirect('/')
 
-
-
-
-# Vercel needs the 'app' variable to be available at the top level
 app = app

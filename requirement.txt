@@ -1,4 +1,0 @@
-flask
-supabase
-PyPDF2
-gunicorn

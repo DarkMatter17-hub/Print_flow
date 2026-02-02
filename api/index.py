@@ -249,5 +249,8 @@ def update_status(job_id, status):
 def logout():
     session.clear(); return redirect('/')
 
-if __name__ == '__main__':
-    app.run(debug=True)
+
+
+
+# Vercel needs the 'app' variable to be available at the top level
+app = app
